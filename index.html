@@ -226,11 +226,11 @@
             border-color: #4ECDC4;
         }
         
-        .reset-btn {
+        .btn {
             background: linear-gradient(45deg, #FF6B6B, #FF8E53);
             color: white;
             border: none;
-            padding: 15px 30px;
+            padding: 15px 20px;
             border-radius: 25px;
             cursor: pointer;
             font-weight: 600;
@@ -239,9 +239,38 @@
             width: 100%;
         }
         
-        .reset-btn:hover {
+        .btn-export {
+            background: linear-gradient(45deg, #4ECDC4, #44A08D);
+            margin-top: 10px;
+        }
+        
+        .btn-import {
+            background: linear-gradient(45deg, #746be6, #5741d4);
+            margin-top: 10px;
+        }
+        
+        .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        .sync-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .btn-group {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
         }
         
         @media (max-width: 600px) {
@@ -252,10 +281,6 @@
             
             .stats {
                 grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .day-selector {
-                grid-template-columns: repeat(4, 1fr);
             }
             
             .day-btn {
@@ -269,7 +294,7 @@
     <div class="container">
         <div class="header">
             <h1>💪 Dieta para Crecimiento Muscular</h1>
-            <p>Muslos y Glúteos - Seguimiento Diario</p>
+            <p>Seguimiento Diario</p>
         </div>
         
         <div class="stats">
@@ -326,7 +351,17 @@
             <textarea class="notes-textarea" id="dailyNotes" placeholder="Escribe aquí tus observaciones del día (cómo te sentiste, entrenamientos, etc.)..."></textarea>
         </div>
         
-        <button class="reset-btn" onclick="resetDay()">🔄 Reiniciar Día</button>
+        <button class="btn" onclick="resetDay()">🔄 Reiniciar Día</button>
+        
+        <div class="sync-section">
+            <h3>📱 Sincronización entre dispositivos</h3>
+            <p>Exporta tus datos para guardarlos en Google Drive y luego impórtalos en otro dispositivo</p>
+            <div class="btn-group">
+                <button class="btn btn-export" onclick="exportData()">📤 Exportar datos</button>
+                <button class="btn btn-import" onclick="document.getElementById('fileInput').click()">📥 Importar datos</button>
+            </div>
+            <input type="file" id="fileInput" class="file-input" accept=".json" onchange="importData(this.files)" />
+        </div>
     </div>
 
     <script>
@@ -458,24 +493,36 @@
         let currentDay = 'lunes';
         let checkedItems = {};
         let dailyNotes = {};
+        const PROTEIN_GOAL = 120;
+        const CALORIE_GOAL = 2200;
 
-        // Cargar datos guardados (usando variables en memoria)
+        // Cargar datos guardados (usando localStorage)
         function loadSavedData() {
-            // Los datos se mantienen en memoria durante la sesión
-            if (!checkedItems) checkedItems = {};
-            if (!dailyNotes) dailyNotes = {};
+            const savedChecked = localStorage.getItem('dietCheckedItems');
+            const savedNotes = localStorage.getItem('dietDailyNotes');
+            
+            if (savedChecked) {
+                checkedItems = JSON.parse(savedChecked);
+            }
+            
+            if (savedNotes) {
+                dailyNotes = JSON.parse(savedNotes);
+            }
         }
 
-        // Guardar datos (en memoria)
+        // Guardar datos (en localStorage)
         function saveData() {
-            // Los datos se mantienen en las variables durante la sesión
+            // Guardar las notas actuales antes de almacenar
+            dailyNotes[currentDay] = document.getElementById('dailyNotes').value;
+            
+            localStorage.setItem('dietCheckedItems', JSON.stringify(checkedItems));
+            localStorage.setItem('dietDailyNotes', JSON.stringify(dailyNotes));
+            localStorage.setItem('lastUpdate', new Date().toISOString());
         }
 
         function selectDay(day) {
             // Guardar notas del día actual
-            if (dailyNotes[currentDay] !== undefined) {
-                dailyNotes[currentDay] = document.getElementById('dailyNotes').value;
-            }
+            dailyNotes[currentDay] = document.getElementById('dailyNotes').value;
             
             currentDay = day;
             
@@ -488,6 +535,9 @@
             
             // Cargar notas del nuevo día
             document.getElementById('dailyNotes').value = dailyNotes[currentDay] || '';
+            
+            // Guardar cambios
+            saveData();
         }
 
         function renderMeals() {
@@ -538,8 +588,8 @@
 
         function isChecked(mealType, index) {
             return checkedItems[currentDay] && 
-                   checkedItems[currentDay][mealType] && 
-                   checkedItems[currentDay][mealType][index];
+                  checkedItems[currentDay][mealType] && 
+                  checkedItems[currentDay][mealType][index];
         }
 
         function toggleFood(mealType, index) {
@@ -553,4 +603,139 @@
             checkedItems[currentDay][mealType][index] = !checkedItems[currentDay][mealType][index];
             
             renderMeals();
-            updateStats
+            updateStats();
+            saveData();
+        }
+        
+        function updateStats() {
+            const dayPlan = dietPlan[currentDay];
+            let totalProtein = 0;
+            let totalCarbs = 0;
+            let totalCalories = 0;
+            let totalItems = 0;
+            let checkedCount = 0;
+            
+            // Contar todos los alimentos y los marcados
+            Object.entries(dayPlan).forEach(([mealType, foods]) => {
+                foods.forEach((food, index) => {
+                    totalItems++;
+                    if (isChecked(mealType, index)) {
+                        checkedCount++;
+                        totalProtein += food.protein;
+                        totalCarbs += food.carbs;
+                        totalCalories += food.calories;
+                    }
+                });
+            });
+            
+            // Actualizar las estadísticas
+            document.getElementById('totalProteins').textContent = totalProtein + 'g';
+            document.getElementById('totalCarbs').textContent = totalCarbs + 'g';
+            document.getElementById('totalCalories').textContent = totalCalories;
+            
+            // Calcular porcentaje de progreso
+            const progressPercent = Math.round((checkedCount / totalItems) * 100);
+            document.getElementById('progress').textContent = progressPercent + '%';
+            
+            // Actualizar barras de progreso
+            const proteinPercent = Math.min(Math.round((totalProtein / PROTEIN_GOAL) * 100), 100);
+            const caloriePercent = Math.min(Math.round((totalCalories / CALORIE_GOAL) * 100), 100);
+            
+            document.getElementById('proteinProgress').style.width = proteinPercent + '%';
+            document.getElementById('calorieProgress').style.width = caloriePercent + '%';
+            
+            document.getElementById('proteinText').textContent = `${totalProtein}g / ${PROTEIN_GOAL}g`;
+            document.getElementById('calorieText').textContent = `${totalCalories} / ${CALORIE_GOAL} kcal`;
+        }
+        
+        function resetDay() {
+            if (confirm('¿Estás seguro de que quieres reiniciar el progreso de este día?')) {
+                if (checkedItems[currentDay]) {
+                    checkedItems[currentDay] = {};
+                }
+                renderMeals();
+                updateStats();
+                saveData();
+            }
+        }
+        
+        // Exportar datos como archivo JSON
+        function exportData() {
+            // Guardar los datos actuales
+            dailyNotes[currentDay] = document.getElementById('dailyNotes').value;
+            
+            const data = {
+                checkedItems: checkedItems,
+                dailyNotes: dailyNotes,
+                lastUpdate: new Date().toISOString()
+            };
+            
+            const dataStr = JSON.stringify(data);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportName = 'dieta_muscular_' + new Date().toISOString().split('T')[0] + '.json';
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportName);
+            linkElement.click();
+            
+            alert('Datos exportados correctamente. Guarda este archivo en Google Drive para acceder desde otro dispositivo.');
+        }
+        
+        // Importar datos desde archivo JSON
+        function importData(files) {
+            if (!files.length) return;
+            
+            const file = files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(event) {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    
+                    if (!data.checkedItems || !data.dailyNotes) {
+                        throw new Error('Formato de archivo inválido');
+                    }
+                    
+                    // Verificar si los datos importados son más recientes
+                    const localLastUpdate = localStorage.getItem('lastUpdate');
+                    const shouldImport = !localLastUpdate || 
+                                         new Date(data.lastUpdate) > new Date(localLastUpdate) ||
+                                         confirm('Los datos importados son más antiguos que los datos locales. ¿Deseas importarlos de todos modos?');
+                    
+                    if (shouldImport) {
+                        checkedItems = data.checkedItems;
+                        dailyNotes = data.dailyNotes;
+                        
+                        localStorage.setItem('dietCheckedItems', JSON.stringify(checkedItems));
+                        localStorage.setItem('dietDailyNotes', JSON.stringify(dailyNotes));
+                        localStorage.setItem('lastUpdate', data.lastUpdate || new Date().toISOString());
+                        
+                        renderMeals();
+                        updateStats();
+                        document.getElementById('dailyNotes').value = dailyNotes[currentDay] || '';
+                        
+                        alert('Datos importados correctamente');
+                    }
+                } catch (e) {
+                    alert('Error al importar los datos: ' + e.message);
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Inicializar la aplicación
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSavedData();
+            renderMeals();
+            updateStats();
+            document.getElementById('dailyNotes').value = dailyNotes[currentDay] || '';
+            
+            // Guardar datos al cerrar la página
+            window.addEventListener('beforeunload', saveData);
+        });
+    </script>
+</body>
+</html>
